@@ -1,0 +1,6 @@
+{
+    "sketch": "timer1/timer1.ino",
+    "configuration": "cpu=16MHzatmega32U4",
+    "board": "sparkfun:avr:promicro",
+    "port": "/dev/ttyACM0"
+}
