@@ -12,11 +12,11 @@
 
 //seconds to countdown before starting timer:
 #define TIMER_INTERVAL 1000
-#define STABILITY_INTERVAL 500
+#define STABILITY_INTERVAL 50
 
-#define COUNTDOWN_INITIAL 5
-#define ORIENTATION_SENSITIVITY_HIGH 0.2
-#define ORIENTATION_SENSITIVITY_LOW -0.2
+#define COUNTDOWN_INITIAL 15
+#define ORIENTATION_SENSITIVITY_HIGH 0.3
+#define ORIENTATION_SENSITIVITY_LOW -0.3
 
 //face/timer associations:
 const int timerStartValues[6] = {-1, 30, 120, 180, 10, 60};
@@ -148,22 +148,8 @@ void buzzer(int num, int onDelay, int offDelay, int led = 0)
  */
 void timerLoop()
 {
-  if (getFace() == 0)
+  if (timerCountdownValue == -1)
   {
-    Serial.println("0face");
-    timerCountdownValue = -1;
-    isStable = false;
-    return;
-  }
-  else if (timerCountdownValue == -1)
-  {
-    if (getFace() == 0)
-    {
-      Serial.println("No Timer Selected...");
-      timerCountdownValue = -1;
-      isStable = false;
-      return;
-    }
     buzzer(3, 100, 50, 1);
     timerCountdownValue = timerStartValues[getFace()] - 1;
   }
@@ -187,6 +173,7 @@ void render()
   else
     Serial.println("false");
 }
+
 bool toggleLED = false;
 void flash()
 {
@@ -214,7 +201,14 @@ void loop()
   else
   {
 
-    if (currentTime - previousTime >= TIMER_INTERVAL)
+    if (getFace() == 0)
+    {
+      Serial.println("0face");
+      timerCountdownValue = -1;
+      isStable = false;
+      return;
+    }
+    else if (currentTime - previousTime >= TIMER_INTERVAL)
     {
       flash();
       previousTime = currentTime;
