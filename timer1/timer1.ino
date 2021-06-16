@@ -1,5 +1,4 @@
 #include <basicMPU6050.h>
-
 //-- Input parameters:
 
 // Gyro settings:
@@ -16,11 +15,11 @@
 #define STABILITY_INTERVAL 500
 
 #define COUNTDOWN_INITIAL 5
-#define ORIENTATION_SENSITIVITY_HIGH 0.01
-#define ORIENTATION_SENSITIVITY_LOW -0.01
+#define ORIENTATION_SENSITIVITY_HIGH 0.2
+#define ORIENTATION_SENSITIVITY_LOW -0.2
 
 //face/timer associations:
-const int timerStartValues[6] = {-1, 9, 8, 7, 6, 5};
+const int timerStartValues[6] = {-1, 30, 120, 180, 10, 60};
 
 // Accelerometer offset: // Use these values to calibrate the accelerometer. The sensor should output 1.0g if held level.
 constexpr int AX_OFFSET = 450;  // Use these values to calibrate the accelerometer. The sensor should output 1.0g if held level.
@@ -32,12 +31,20 @@ constexpr float AX_SCALE = 2; // Multiplier for accelerometer outputs. Use this 
 constexpr float AY_SCALE = 2;
 constexpr float AZ_SCALE = 2;
 
-//-- Set the template parameters:
-
 basicMPU6050<LP_FILTER, GYRO_SENS, ACCEL_SENS,
              AX_OFFSET, AY_OFFSET, AZ_OFFSET,
              &AX_SCALE, &AY_SCALE, &AZ_SCALE>
     imu;
+
+/* Global variables */
+bool isStable = false;
+int stabilityCountdown = COUNTDOWN_INITIAL;
+float pX = 0;
+float pY = 0;
+float pZ = 0;
+
+int previousTime = millis();
+int timerCountdownValue = -1;
 
 void setup()
 {
@@ -74,10 +81,7 @@ int getFace()
   else if (imu.ax() < -0.9)
     return 5;
 }
-int stabilityCountdown = COUNTDOWN_INITIAL;
-float pX = 0;
-float pY = 0;
-float pZ = 0;
+
 /* 
   Compare current to previous readings, countdown if they are within margins defined by ORIENTATION_SENSITIVITY
  */
@@ -86,7 +90,7 @@ bool checkStability()
   //if values are unstable, reset count
   Serial.print("Stability: ");
   Serial.println(stabilityCountdown);
-  
+
   if (pX - imu.ax() > ORIENTATION_SENSITIVITY_HIGH || pX - imu.ax() < ORIENTATION_SENSITIVITY_LOW ||
       pY - imu.ay() > ORIENTATION_SENSITIVITY_HIGH || pY - imu.ay() < ORIENTATION_SENSITIVITY_LOW ||
       pZ - imu.az() > ORIENTATION_SENSITIVITY_HIGH || pZ - imu.az() < ORIENTATION_SENSITIVITY_LOW)
@@ -96,49 +100,112 @@ bool checkStability()
     pZ = imu.az();
     stabilityCountdown = COUNTDOWN_INITIAL;
   }
-  else if (stabilityCountdown == 0){
-    stabilityCountdown = COUNTDOWN_INITIAL;
-    return true;
-  }else stabilityCountdown--;
-  return false;
+  else
+  {
+    stabilityCountdown--;
+    if (stabilityCountdown <= 0)
+    {
+      stabilityCountdown = COUNTDOWN_INITIAL;
+      return true;
+    }
+    else
+      return false;
+  }
 }
-
-
-void buzzer(){
-}
-/* 
-  Timer loop
- */
-
-void timerLoop(int countdownValue = timerStartValues[getFace()] - 1)
+/* led: 0 = only buzzer, 1= both, 2=only led  */
+void buzzer(int num, int onDelay, int offDelay, int led = 0)
 {
+  for (int i = 0; i < num; i++)
+  {
+    switch (led)
+    {
+    case 1:
+      digitalWrite(LED_PIN, HIGH);
+      digitalWrite(BUZZ_PIN, HIGH);
+      delay(onDelay);
+      digitalWrite(LED_PIN, LOW);
+      digitalWrite(BUZZ_PIN, LOW);
+      delay(offDelay);
+      break;
+    case 2:
+      digitalWrite(BUZZ_PIN, HIGH);
+      delay(onDelay);
+      digitalWrite(BUZZ_PIN, LOW);
+      delay(offDelay);
+      break;
+    default:
+      digitalWrite(LED_PIN, HIGH);
+      delay(onDelay);
+      digitalWrite(LED_PIN, LOW);
+      delay(offDelay);
+      break;
+    }
+  }
 }
-bool isStable = false;
-int previousTime = millis();
-void render(){
+
+/* 
+  Timer loop, executed every 1000ms when isStable == true;
+ */
+void timerLoop()
+{
+  if (getFace() == 0)
+  {
+    Serial.println("0face");
+    timerCountdownValue = -1;
+    isStable = false;
+    return;
+  }
+  else if (timerCountdownValue == -1)
+  {
+    if (getFace() == 0)
+    {
+      Serial.println("No Timer Selected...");
+      timerCountdownValue = -1;
+      isStable = false;
+      return;
+    }
+    buzzer(3, 100, 50, 1);
+    timerCountdownValue = timerStartValues[getFace()] - 1;
+  }
+  else if (timerCountdownValue != 0)
+    timerCountdownValue--;
+  else
+  {
+    buzzer(3, 333, 333, 1);
+    timerCountdownValue = -1;
+    isStable = false;
+  }
+  Serial.print("timerCountdownValue: ");
+  Serial.println(timerCountdownValue);
+}
+
+void render()
+{
   Serial.print("isstable: ");
-  if(isStable) Serial.println("true");
-  else Serial.println("false");
-  
-  int currentTime = millis();
-  Serial.print("previousTime: ");
-  Serial.print(previousTime);
-  Serial.print(" currentTime: ");
-  Serial.println(currentTime);
+  if (isStable)
+    Serial.println("true");
+  else
+    Serial.println("false");
+}
+bool toggleLED = false;
+void flash()
+{
+  toggleLED = !toggleLED;
+  if (toggleLED)
+    digitalWrite(LED_PIN, HIGH);
+  else
+    digitalWrite(LED_PIN, LOW);
 }
 void loop()
 {
   int currentTime = millis();
-  
-
-  
   if (!isStable)
   {
-    
+
     /* check for stability every .5 seconds, till stability countdown is satisfied */
     if (currentTime - previousTime >= STABILITY_INTERVAL)
     {
-      
+      flash();
       previousTime = currentTime;
       isStable = checkStability();
       render();
@@ -146,10 +213,12 @@ void loop()
   }
   else
   {
+
     if (currentTime - previousTime >= TIMER_INTERVAL)
     {
+      flash();
       previousTime = currentTime;
-      isStable = checkStability();
+      timerLoop();
       render();
     }
   }
